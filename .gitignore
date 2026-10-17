@@ -1,0 +1,28 @@
+# Secrets and credentials
+*.credentials
+*.secrets
+.env
+.env.*
+!*.example
+config/local*.yaml
+
+# Runtime and generated files
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.log
+*.log.*
+*.pcap
+*.pcapng
+*.dump
+__pycache__/
+.pytest_cache/
+.venv/
+
+# Malware test artifacts / samples and data dumps
+samples/
+test-artifacts/
+quarantine/
+media/
+downloads/
