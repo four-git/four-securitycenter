@@ -219,15 +219,50 @@ Once installed, use systemd for routine lifecycle changes so its state stays in 
 
 ### Enable scan intervals separately
 
-Schedules are a separate opt-in. Edit `.env`, preserving image settings:
+Start with discovery every hour and a bounded scan every six hours on the 4 GB Pi. Discovery records file observations without running scan engines; it helps completed files satisfy the 15-minute stability policy before the next scan. Scan jobs have a configured 15-minute work budget and examine at most 2,000 candidate paths per run. This cadence does not guarantee the entire library is scanned every six hours. Watch the first runs and Jellyfin playback before increasing frequency. Unchanged files can become eligible again after signature/rule changes.
+
+Schedules are a separate opt-in. Edit `.env`, preserving `DEBIAN_IMAGE`, `SUITE_IMAGE` and other settings:
 
 ```bash
 sudoedit /opt/four-securitycenter/.env
-# Example: SCAN_INTERVAL_SECONDS=21600 and DISCOVER_INTERVAL_SECONDS=3600
+```
+
+Set these two lines (replace existing interval lines; do not add duplicates):
+
+```dotenv
+SCAN_INTERVAL_SECONDS=21600
+DISCOVER_INTERVAL_SECONDS=3600
+```
+
+Apply and check the scheduler's startup log:
+
+```bash
 sudo systemctl restart four-securitycenter.service
+cd /opt/four-securitycenter
+sudo ./suite doctor
+sudo docker compose logs --tail 20 scanner
 ```
 
 Without the boot unit, apply changes with `sudo ./suite restart`. Zero disables a schedule; nonzero intervals must be at least 60 seconds. Jobs run serially and share the manual scanner lock. First execution waits one interval. Return both values to zero to disable automatic work.
+
+These are elapsed intervals, not fixed clock times. After a restart, the first discovery waits one hour and the first scan waits six hours. Each later run waits its interval after completion; another job can delay it. Starting the service does not start an immediate scan. Use `sudo ./suite scan` for a manual run.
+
+### What happens when a scan finds something
+
+The scanner records results/evidence in local SQLite state and prints a summary to container logs. ClamAV detections are labelled `MALWARE_DETECTED`. A local YARA rule match is `YARA_MATCH` and requires review; it does not by itself confirm malware. Errors, skipped files and partial coverage are reported separately.
+
+The NAS is read-only. The suite does not delete, quarantine, repair, move or block access to files, stop downloads/playback, or upload samples. An alert does not prevent Jellyfin or another NAS application from opening the file. Findings require manual review and any remediation is a separate owner action. No email, phone or other external notification is configured.
+
+Review findings and job logs regularly:
+
+```bash
+cd /opt/four-securitycenter
+sudo ./suite alerts
+sudo ./suite status
+sudo ./suite logs
+```
+
+`alerts` returns the latest 100 relevant events, including detections, scan errors, partial/skipped coverage and file changes. Event retention is configured to 30 days; the file-state table retains current observations/results. A scheduler stays running after a detection and logs the job's exit code; a healthy container does not mean there are no findings.
 
 ## Backup, update and recovery
 
