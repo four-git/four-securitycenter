@@ -13,6 +13,6 @@ Coverage is NARROW: these detect selected suspicious payload shapes, not all mal
 
 ClamAV's per-file ceiling remains independent. A large file checked only by these rules must be PARTIALLY_SCANNED, with ClamAV SKIPPED_SIZE_LIMIT. This is not antivirus-equivalent coverage and no file should receive an unqualified safe verdict.
 
-Classic YARA4.5.2 on the Pi successfully detected a harmless marker after byte2,200,000,000 in a2.2GB local fixture. Next acceptance checks exercise these actual triage rules at the same offset and confirm benign fixtures produce no match. Do not enable automatic scanning until validation and resource checks pass.
+The prior native Pi validation exercised both media triage rules beyond byte2,200,000,000 and confirmed the benign fixture produced no match. See [recorded results and Docker acceptance checks](DOCKER-RUNBOOK.md#prior-native-validation). Repeat validation and resource checks in containers before enabling automatic scanning.
 
 A broad maintained malware rule pack or another AV engine can be evaluated separately; none has been silently enabled. Downloaded signature-base repository was inspected as a possible source but is not deployed.

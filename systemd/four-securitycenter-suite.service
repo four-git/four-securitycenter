@@ -10,9 +10,9 @@ StartLimitBurst=3
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=/opt/four-securitycenter-suite
-ExecStart=/usr/bin/python3 /opt/four-securitycenter-suite/suite start
-ExecStop=/usr/bin/python3 /opt/four-securitycenter-suite/suite stop
+WorkingDirectory=/opt/four-securitycenter
+ExecStart=/usr/bin/python3 /opt/four-securitycenter/suite start
+ExecStop=/usr/bin/python3 /opt/four-securitycenter/suite stop
 TimeoutStartSec=180
 Restart=on-failure
 RestartSec=60

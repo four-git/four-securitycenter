@@ -1,46 +1,29 @@
 # four-securitycenter
 
-A resource-conscious **Raspberry Pi 4 (4 GB)** home security appliance project for **read-only Synology NAS file scanning** and **passive network intrusion detection**.
+A Raspberry Pi 4 / 4 GB security suite for read-only Synology NAS file scanning, with optional passive network IDS.
 
-> **Status (October18,2026):** Phase3 scanning framework deployed and acceptance-tested on the Pi with owner authorization. Schedules remain disabled. Large-media coverage is two narrow YARA triage rules, not comprehensive antivirus. See [operations and observed tests](docs/PHASE3-OPERATIONS.md) and [rule coverage](docs/RULE-COVERAGE.md). Suricata remains disabled; network visibility is unverified.
+**Start with [Docker setup and operation](docs/DOCKER-RUNBOOK.md).** It covers prerequisites, scripted host setup, the NAS mount, image build, startup and recovery.
 
-## Confirmed environment
-
-- Scanner host: **`four-securitycenter`**, IP **`192.168.4.51`**, **Debian GNU/Linux 13 (trixie), 13.5**.
-- NAS: **Synology DS220+**, host **`four-nas`**, IP **`192.168.4.46`**, DSM 7.x.
-- NAS services: Jellyfin, qBittorrent, Prowlarr. CPU-heavy scanning belongs on Pi, not NAS.
-- Networking: eero; switch/mirror support unknown. **No full-LAN monitoring claim until packet capture is validated**.
-
-## Start here
-
-Docker suite implementation: see [Docker installation and migration](docs/DOCKER-RUNBOOK.md). Automatic scans remain disabled; ARM64 and live Pi acceptance are pending.
-
-1. Read **[Deployment & Operations Runbook](docs/INSTALLATION-RUNBOOK.md)**.
-2. Confirm `uname -m`, network connection and mount paths; run Debian updates on the Pi.
-3. Create a read-only DSM account, verify SMB shares and validate a small scanner test.
-4. Only then configure Suricata after documenting actual traffic-capture visibility.
-5. Give Codex **[Implementation Brief](docs/CODEX-BUILD-SPEC.md)** to build the remaining automation.
-
-## Current stack decision
-
-**ClamAV + FreshClam** (batch AV), **classic YARA** (Debian-packaged curated rules), **Suricata + suricata-update** (passive IDS once visibility verified). YARA-X is a future evaluation, not assumed to be Debian-packaged. Keep memory under control and report scan limitations honestly.
-
-## Safe first Pi update
+The setup scripts are:
 
 ```bash
-sudo apt update && sudo apt full-upgrade -y
-sudo apt autoremove --purge   # review removals
-sudo apt autoclean
-sudo reboot
+# On the Pi, from /opt/four-securitycenter:
+sudo bash scripts/pre-req.sh --dry-run --migrate-native
+sudo bash scripts/pre-req.sh --migrate-native
+# Enter NAS credentials with sudoedit if needed, then:
+sudo bash scripts/pre-req.sh --mount
+sudo bash scripts/install-suite.sh --dry-run
+sudo bash scripts/install-suite.sh
+sudo ./suite start
+sudo ./suite doctor
 ```
 
-## Not in this starter
+For a fresh host, omit `--migrate-native`. Follow the guide's copy/staging step before these commands. Preparation prints progress, preserves existing config/data, and snapshots the native installation before migration. Automatic scans and Suricata remain disabled.
 
-- NAS share names/credentials (must be supplied from DSM, never committed)
-- Broad production malware-rule coverage (the incremental runner and disabled systemd timer units now exist)
-- Working network IDS capture without verified mirrored traffic
-- Monitoring UI, notifications or external accounts (to be selected)
+Target: `four-securitycenter` / `192.168.4.51`, Debian 13 ARM64. NAS: `four-nas` / `192.168.4.46`, share `//192.168.4.46/data`, mounted read-only at `/mnt/four-securitycenter/downloads`.
 
-## Safety
+**Status:** Prior native scanner results are recorded in the [Docker guide](docs/DOCKER-RUNBOOK.md#prior-native-validation). Docker implementation is available; ARM64 build and live Pi acceptance remain pending.
 
-Read-only NAS SMB account; passive monitoring only; no automatic deletion/blocking; no public web ports; no secrets/logs/media/packet captures committed to Git.
+ClamAV is configured up to 1.9 GB/file. The two local YARA rules provide narrow MKV/MP4 payload triage up to 8 GB, not comprehensive antivirus coverage. See [rule coverage](docs/RULE-COVERAGE.md). Suricata requires verified traffic capture before use.
+
+No automatic NAS writes, deletion, quarantine, blocking, public web ports or sample uploads are configured. Credentials stay on the Pi and out of Git/images.

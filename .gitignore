@@ -17,6 +17,7 @@ config/local*.yaml
 *.pcapng
 *.dump
 __pycache__/
+package-versions.txt
 .pytest_cache/
 .venv/
 
