@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "suite_version": "0.1.0",
+  "target": "Debian 13 / linux/arm64 / Raspberry Pi 4GB",
+  "base_image": "resolved to immutable digest by installer and stored in .env",
+  "image_id": null,
+  "package_versions": null,
+  "build_status": "not built in this workspace",
+  "acceptance_status": "Pi and ARM64 validation pending",
+  "automatic_scans": false
+}

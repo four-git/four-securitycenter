@@ -1,0 +1,10 @@
+[Unit]
+Description=Discover NAS file changes every two hours
+
+[Timer]
+OnCalendar=*-*-* 00/2:00:00
+RandomizedDelaySec=5m
+Persistent=false
+
+[Install]
+WantedBy=timers.target

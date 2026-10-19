@@ -2,7 +2,7 @@
 
 A resource-conscious **Raspberry Pi 4 (4 GB)** home security appliance project for **read-only Synology NAS file scanning** and **passive network intrusion detection**.
 
-> **Status:** Planning / owner-operated phased deployment. Nothing in this repository should change production NAS, Pi or router settings until the relevant step is reviewed and executed.
+> **Status (October18,2026):** Phase3 scanning framework deployed and acceptance-tested on the Pi with owner authorization. Schedules remain disabled. Large-media coverage is two narrow YARA triage rules, not comprehensive antivirus. See [operations and observed tests](docs/PHASE3-OPERATIONS.md) and [rule coverage](docs/RULE-COVERAGE.md). Suricata remains disabled; network visibility is unverified.
 
 ## Confirmed environment
 
@@ -12,6 +12,8 @@ A resource-conscious **Raspberry Pi 4 (4 GB)** home security appliance project f
 - Networking: eero; switch/mirror support unknown. **No full-LAN monitoring claim until packet capture is validated**.
 
 ## Start here
+
+Docker suite implementation: see [Docker installation and migration](docs/DOCKER-RUNBOOK.md). Automatic scans remain disabled; ARM64 and live Pi acceptance are pending.
 
 1. Read **[Deployment & Operations Runbook](docs/INSTALLATION-RUNBOOK.md)**.
 2. Confirm `uname -m`, network connection and mount paths; run Debian updates on the Pi.
@@ -35,7 +37,7 @@ sudo reboot
 ## Not in this starter
 
 - NAS share names/credentials (must be supplied from DSM, never committed)
-- Full incremental scanning implementation/systemd timers (Codex will build)
+- Broad production malware-rule coverage (the incremental runner and disabled systemd timer units now exist)
 - Working network IDS capture without verified mirrored traffic
 - Monitoring UI, notifications or external accounts (to be selected)
 

@@ -1,0 +1,9 @@
+/var/log/four-securitycenter/*.log {
+    daily
+    rotate 14
+    size 5M
+    compress
+    missingok
+    notifempty
+    create 0640 four-securitycenter four-securitycenter
+}

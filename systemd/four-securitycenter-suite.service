@@ -1,0 +1,21 @@
+[Unit]
+Description=Four security center Docker suite
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+RequiresMountsFor=/mnt/four-securitycenter/downloads
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/four-securitycenter-suite
+ExecStart=/usr/bin/python3 /opt/four-securitycenter-suite/suite start
+ExecStop=/usr/bin/python3 /opt/four-securitycenter-suite/suite stop
+TimeoutStartSec=180
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target

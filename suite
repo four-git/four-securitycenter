@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""Host management CLI. Run from a root-owned checkout on the Pi."""
+import argparse
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import time
+
+ROOT = Path(__file__).resolve().parent
+CONFIG = Path('/etc/four-securitycenter/scanner.json')
+BACKUPS = Path('/var/backups/four-securitycenter')
+PATHS = ('/etc/four-securitycenter', '/var/lib/four-securitycenter', '/var/lib/clamav')
+
+
+def call(args, **kwargs):
+    return subprocess.run(args, check=True, timeout=kwargs.pop('timeout', 120), **kwargs)
+
+
+def compose(*args):
+    return call(['docker', 'compose', '--project-directory', str(ROOT), '-f', str(ROOT / 'compose.yaml'), *args], timeout=None)
+
+
+def preflight():
+    # Importing this module performs no scans or database writes.
+    cfg = json.loads(CONFIG.read_text())
+    if cfg['mount'] != '/mnt/four-securitycenter/downloads':
+        raise RuntimeError('Compose NAS path and scanner configuration must match')
+    call([sys.executable, '-c',
+          'import json,sys; sys.path.insert(0,sys.argv[1]); '
+          'from four_securitycenter import verify_mount; '
+          'verify_mount(json.load(open(sys.argv[2])))',
+          str(ROOT / 'src'), str(CONFIG)], timeout=25)
+    for unit in ('four-securitycenter-scan.timer', 'four-securitycenter-discover.timer',
+                 'four-securitycenter-report.timer', 'four-securitycenter-scan.service',
+                 'four-securitycenter-discover.service', 'clamav-freshclam.service'):
+        if subprocess.run(['systemctl', 'is-active', '--quiet', unit], timeout=10).returncode == 0:
+            raise RuntimeError('Stop native service/timer before container ownership: ' + unit)
+    compose('config', '--quiet')
+
+
+def backup():
+    compose('stop')
+    BACKUPS.mkdir(mode=0o700, parents=True, exist_ok=True)
+    dest = BACKUPS / time.strftime('%Y%m%d-%H%M%S')
+    dest.mkdir(mode=0o700)
+    for item in PATHS:
+        source = Path(item)
+        if source.exists():
+            shutil.copytree(source, dest / source.relative_to('/'), symlinks=True)
+    shutil.copy2(ROOT / '.env', dest / 'suite.env')
+    shutil.copy2(ROOT / 'deployment-manifest.json', dest / 'deployment-manifest.json')
+    print('Stopped snapshot (services remain stopped):', dest)
+    return dest
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('action', choices=('install', 'doctor', 'start', 'stop', 'restart', 'status', 'scan', 'alerts', 'logs', 'update', 'backup', 'rollback'))
+    p.add_argument('snapshot', nargs='?')
+    p.add_argument('--dry-run', action='store_true')
+    p.add_argument('--target')
+    a = p.parse_args()
+    if a.snapshot and a.action != 'rollback':
+        p.error('snapshot is only valid for rollback')
+    if a.action == 'install':
+        return call(['bash', str(ROOT / 'scripts/install-suite.sh'), *(['--dry-run'] if a.dry_run else [])]).returncode
+    if a.dry_run and a.action != 'scan':
+        p.error('--dry-run is supported for install and scan')
+    if a.target and a.action != 'scan':
+        p.error('--target is only valid for scan')
+    if a.action in ('start', 'restart', 'doctor', 'scan', 'update'):
+        preflight()
+    if a.action in ('start', 'restart'):
+        compose('up', '-d', '--force-recreate', 'signatures', 'scanner')
+    elif a.action == 'doctor':
+        compose('exec', '-T', 'scanner', 'python3', '/opt/four-securitycenter/src/container_service.py', 'health')
+    elif a.action == 'stop':
+        compose('--profile', 'ids', 'stop')
+    elif a.action == 'status':
+        compose('ps', '--all')
+        print('Coverage: narrow YARA media triage up to 8GB; ClamAV ceiling 1.9GB. Health failure means BLOCKED/degraded.')
+        compose('exec', '-T', 'scanner', 'python3', '/opt/four-securitycenter/src/container_service.py', 'health')
+        compose('exec', '-T', 'scanner', 'python3', '/opt/four-securitycenter/src/container_service.py', 'status')
+    elif a.action in ('scan', 'alerts'):
+        extra = (['--dry-run'] if a.dry_run else []) + (['--target', a.target] if a.target else [])
+        compose('exec', '-T', 'scanner', 'python3', '/opt/four-securitycenter/src/container_service.py', a.action, *extra)
+    elif a.action == 'logs':
+        compose('--profile', 'ids', 'logs', '--tail', '100')
+    elif a.action == 'backup':
+        backup()
+    elif a.action == 'update':
+        backup()
+        # Preserve the previous local image so the snapshot is actually runnable.
+        call(['bash', str(ROOT / 'scripts/install-suite.sh')], timeout=None)
+        print('Build complete. Review package versions and ARM64 checks, then suite start. Snapshot preserved.')
+    elif a.action == 'rollback':
+        if not a.snapshot:
+            p.error('rollback requires a snapshot directory printed by backup')
+        source = Path(a.snapshot).resolve()
+        if source.parent != BACKUPS or not source.is_dir():
+            raise RuntimeError('Snapshot must be a direct child of ' + str(BACKUPS))
+        for name in ('etc/four-securitycenter', 'var/lib/four-securitycenter', 'var/lib/clamav', 'suite.env', 'deployment-manifest.json'):
+            if not (source / name).exists():
+                raise RuntimeError('Incomplete snapshot: ' + name)
+        backup()
+        for item in PATHS:
+            target = Path(item)
+            # These absolute paths are fixed above; never derive deletion targets from the archive.
+            if target.exists():
+                shutil.rmtree(target)
+            shutil.copytree(source / target.relative_to('/'), target, symlinks=True)
+        shutil.copy2(source / 'suite.env', ROOT / '.env')
+        shutil.copy2(source / 'deployment-manifest.json', ROOT / 'deployment-manifest.json')
+        print('Restored. Verify native/container updater ownership and run suite start after doctor checks.')
+    return 0
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except (Exception, KeyboardInterrupt) as exc:
+        print('BLOCKED:', exc, file=sys.stderr)
+        sys.exit(exc.returncode if isinstance(exc, subprocess.CalledProcessError) else 2)

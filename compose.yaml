@@ -1,0 +1,95 @@
+name: four-securitycenter
+x-common: &common
+  image: ${SUITE_IMAGE:-four-securitycenter:local}
+  user: '997:983'
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 64
+  restart: 'on-failure:3'
+  stop_grace_period: 45s
+  tmpfs: ['/tmp:size=64m,mode=1777']
+  logging:
+    driver: json-file
+    options: {max-size: 10m, max-file: '3'}
+services:
+  scanner:
+    <<: *common
+    build:
+      context: .
+      args:
+        DEBIAN_IMAGE: ${DEBIAN_IMAGE:?Run install-suite.sh to resolve and record a Debian digest}
+    network_mode: none
+    mem_limit: 1800m
+    cpus: 1.0
+    environment:
+      SCAN_INTERVAL_SECONDS: ${SCAN_INTERVAL_SECONDS:-0}
+      DISCOVER_INTERVAL_SECONDS: ${DISCOVER_INTERVAL_SECONDS:-0}
+    volumes:
+      - type: bind
+        source: /mnt/four-securitycenter/downloads
+        target: /mnt/four-securitycenter/downloads
+        read_only: true
+        bind: {create_host_path: false, propagation: rprivate}
+      - type: bind
+        source: /etc/four-securitycenter/scanner.json
+        target: /etc/four-securitycenter/scanner.json
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./rules
+        target: /opt/four-securitycenter/rules
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: /var/lib/four-securitycenter
+        target: /var/lib/four-securitycenter
+        bind: {create_host_path: false}
+      - type: bind
+        source: /var/lib/clamav
+        target: /var/lib/clamav
+        read_only: true
+        bind: {create_host_path: false}
+    healthcheck:
+      test: [CMD, python3, /opt/four-securitycenter/src/container_service.py, health]
+      interval: 60s
+      timeout: 25s
+      start_period: 60s
+      retries: 2
+  signatures:
+    <<: *common
+    command: [signatures]
+    mem_limit: 256m
+    cpus: 0.25
+    volumes:
+      - type: bind
+        source: /var/lib/clamav
+        target: /var/lib/clamav
+        bind: {create_host_path: false}
+    healthcheck:
+      test: [CMD, python3, /opt/four-securitycenter/src/container_service.py, signature-health]
+      interval: 5m
+      timeout: 10s
+      start_period: 10m
+      retries: 2
+  suricata:
+    <<: *common
+    profiles: [ids]
+    user: '0:0'
+    network_mode: host
+    cap_add: [NET_RAW, NET_ADMIN, SETUID, SETGID, SETPCAP, SYS_NICE]
+    command: [ids]
+    environment:
+      CAPTURE_INTERFACE: ${CAPTURE_INTERFACE:-}
+    mem_limit: 512m
+    cpus: 0.5
+    volumes:
+      - type: bind
+        source: /etc/four-securitycenter/suricata
+        target: /etc/suricata
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: /var/log/four-securitycenter/suricata
+        target: /var/log/suricata
+        bind: {create_host_path: false}
