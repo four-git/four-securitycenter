@@ -1,6 +1,6 @@
 # Docker suite: setup and operation
 
-This is the current installation guide. Run host commands on **four-securitycenter, Debian 13 ARM64, Raspberry Pi 4 / 4 GB**. Docker/ARM64 build and live Pi acceptance are still pending; the scripts have not been run on your Pi as part of this change.
+This is the current installation guide. Run host commands on **four-securitycenter, Debian 13 ARM64, Raspberry Pi 4 / 4 GB**. On October 19, 2026, the ARM64 image was built and container health checks passed on the Pi, including the read-only NAS mount and scanner engines. Full scan, resource and recovery acceptance remains in progress.
 
 The setup is: **copy repo → prepare host → verify NAS mount → build image → start → validate**. No automatic scan or IDS is enabled during installation.
 
@@ -153,7 +153,7 @@ Run from `/opt/four-securitycenter`:
 
 | Action | Command |
 |---|---|
-| Start scanner + signatures | `sudo ./suite start` |
+| Start scanner + signatures before systemd installation | `sudo ./suite start` |
 | Host-only checks, including native job conflicts | `sudo ./suite check` |
 | Check running scanner prerequisites | `sudo ./suite doctor` |
 | Containers, health and counts | `sudo ./suite status` |
@@ -176,23 +176,55 @@ Before enabling unattended operation, record results on the Pi:
 - Test NAS unavailable/stale mount, unmount/remount, container recreation and reboot. Failures must produce blocked/unhealthy results.
 - Test snapshot restoration and native recovery before relying on either.
 
-After acceptance, optionally install the boot unit:
+### Install the four-securitycenter service
+
+The host service is named **`four-securitycenter.service`**. It starts scanner/signature containers and stops all suite containers through the existing `suite` CLI. Installing it enables container startup at boot; scan intervals remain controlled separately by `.env`.
+
+After acceptance, install it with the following block. The block also handles an existing `four-securitycenter-suite.service`: disable/stop that old unit before starting the new one. The subshell stops at the first failure. A brief container stop/start is expected; data and settings are preserved. No image rebuild is needed for this service rename.
 
 ```bash
-sudo install -m 0644 systemd/four-securitycenter-suite.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now four-securitycenter-suite.service
-sudo ./suite doctor
+(
+  set -e
+  cd /opt/four-securitycenter
+  sudo git pull --ff-only
+
+  if sudo systemctl cat four-securitycenter-suite.service >/dev/null 2>&1; then
+    sudo systemctl disable --now four-securitycenter-suite.service
+  fi
+
+  sudo ./suite stop
+  sudo install -m 0644 systemd/four-securitycenter.service /etc/systemd/system/four-securitycenter.service
+  sudo systemctl daemon-reload
+  sudo systemctl enable four-securitycenter.service
+  sudo systemctl restart four-securitycenter.service
+  sudo systemctl status four-securitycenter.service --no-pager
+  sudo ./suite doctor
+)
 ```
 
-Once installed, use `sudo systemctl start|stop|restart four-securitycenter-suite.service` for routine lifecycle changes. `active (exited)` means the launch command succeeded; use doctor for current health.
+Once installed, use systemd for routine lifecycle changes so its state stays in sync with the containers:
+
+| Action | Command |
+|---|---|
+| Start | `sudo systemctl start four-securitycenter` |
+| Stop | `sudo systemctl stop four-securitycenter` |
+| Restart / recreate containers after a verified NAS remount | `sudo systemctl restart four-securitycenter` |
+| Service status | `sudo systemctl status four-securitycenter --no-pager` |
+| Enable startup at boot | `sudo systemctl enable four-securitycenter` |
+| Disable startup and stop now | `sudo systemctl disable --now four-securitycenter` |
+| Host service logs | `sudo journalctl -u four-securitycenter -n 100 --no-pager` |
+| Live container prerequisites | `sudo /opt/four-securitycenter/suite doctor` |
+
+`active (exited)` is expected for this oneshot unit: the launch command completed and containers run under Docker. Use doctor and `sudo /opt/four-securitycenter/suite logs` to inspect the running containers. Service startup does not wait for healthy signatures/scanner; a first signature download can take several minutes. The old unit, if present, remains installed but disabled.
+
+### Enable scan intervals separately
 
 Schedules are a separate opt-in. Edit `.env`, preserving image settings:
 
 ```bash
 sudoedit /opt/four-securitycenter/.env
 # Example: SCAN_INTERVAL_SECONDS=21600 and DISCOVER_INTERVAL_SECONDS=3600
-sudo systemctl restart four-securitycenter-suite.service
+sudo systemctl restart four-securitycenter.service
 ```
 
 Without the boot unit, apply changes with `sudo ./suite restart`. Zero disables a schedule; nonzero intervals must be at least 60 seconds. Jobs run serially and share the manual scanner lock. First execution waits one interval. Return both values to zero to disable automatic work.
@@ -202,7 +234,7 @@ Without the boot unit, apply changes with `sudo ./suite restart`. Zero disables 
 These operations leave containers stopped. If the boot unit is installed, stop it first:
 
 ```bash
-sudo systemctl stop four-securitycenter-suite.service  # only if installed
+sudo systemctl stop four-securitycenter.service  # only if installed
 sudo ./suite backup
 # Or snapshot and rebuild the currently staged source:
 sudo ./suite update

@@ -1,5 +1,5 @@
 [Unit]
-Description=Four security center Docker suite
+Description=Four security center containers
 Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target

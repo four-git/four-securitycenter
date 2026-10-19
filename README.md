@@ -22,7 +22,9 @@ For a fresh host, omit `--migrate-native`. Follow the guide's copy/staging step 
 
 Target: `four-securitycenter` / `192.168.4.51`, Debian 13 ARM64. NAS: `four-nas` / `192.168.4.46`, share `//192.168.4.46/data`, mounted read-only at `/mnt/four-securitycenter/downloads`.
 
-**Status:** Prior native scanner results are recorded in the [Docker guide](docs/DOCKER-RUNBOOK.md#prior-native-validation). Docker implementation is available; ARM64 build and live Pi acceptance remain pending.
+After validation, install **`four-securitycenter.service`** using the [systemd setup commands](docs/DOCKER-RUNBOOK.md#install-the-four-securitycenter-service). Then use `sudo systemctl start four-securitycenter`, `stop four-securitycenter` or `restart four-securitycenter` for lifecycle control. Automatic scan schedules are configured separately.
+
+**Status:** The ARM64 image was built and container health/mount checks passed on the Pi on October 19, 2026. Full scan, resource and recovery acceptance remains in progress. Prior native scanner results are recorded in the [Docker guide](docs/DOCKER-RUNBOOK.md#prior-native-validation).
 
 ClamAV is configured up to 1.9 GB/file. The two local YARA rules provide narrow MKV/MP4 payload triage up to 8 GB, not comprehensive antivirus coverage. See [rule coverage](docs/RULE-COVERAGE.md). Suricata requires verified traffic capture before use.
 
