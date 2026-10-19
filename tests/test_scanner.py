@@ -37,6 +37,41 @@ class ScannerTests(unittest.TestCase):
             with patch.object(s, 'command', return_value=type('R', (), {'returncode': 0, 'stdout': json.dumps(good)})()):
                 self.assertEqual(s.verify_mount(cfg)['fstype'], 'cifs')
 
+    def test_mount_accepts_autofs_with_one_read_only_cifs(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg = {'mount': d, 'source': '//nas/data', 'expected_dirs': []}
+            autofs = {'source': 'systemd-1', 'target': d, 'fstype': 'autofs', 'options': 'rw,relatime'}
+            cifs = {'source': '//nas/data', 'target': d, 'fstype': 'cifs', 'options': 'ro,nosuid,nodev'}
+            for rows in ([autofs, cifs], [cifs, autofs]):
+                with self.subTest(rows=rows):
+                    result = type('R', (), {'returncode': 0, 'stdout': json.dumps({'filesystems': rows})})()
+                    with patch.object(s, 'command', return_value=result):
+                        self.assertEqual(s.verify_mount(cfg), cifs)
+
+    def test_mount_autofs_wrapper_does_not_hide_unsafe_mounts(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg = {'mount': d, 'source': '//nas/data', 'expected_dirs': []}
+            autofs = {'source': 'systemd-1', 'target': d, 'fstype': 'autofs', 'options': 'rw'}
+            cifs = {'source': '//nas/data', 'target': d, 'fstype': 'cifs', 'options': 'ro'}
+            cases = {
+                'autofs only': [autofs],
+                'missing': [],
+                'writable': [autofs, dict(cifs, options='rw')],
+                'conflicting flags': [autofs, dict(cifs, options='ro,rw')],
+                'wrong source': [autofs, dict(cifs, source='//other/data')],
+                'wrong target': [autofs, dict(cifs, target=d + '/other')],
+                'local filesystem': [autofs, dict(cifs, fstype='ext4')],
+                'multiple backing mounts': [autofs, cifs, dict(cifs)],
+                'unrelated wrapper': [dict(autofs, target=d + '/other'), cifs],
+                'multiple wrappers': [autofs, dict(autofs), cifs],
+            }
+            for name, rows in cases.items():
+                with self.subTest(name=name):
+                    result = type('R', (), {'returncode': 0, 'stdout': json.dumps({'filesystems': rows})})()
+                    with patch.object(s, 'command', return_value=result):
+                        with self.assertRaises(RuntimeError):
+                            s.verify_mount(cfg)
+
     def test_mount_opens_automount_before_inspection(self):
         with tempfile.TemporaryDirectory() as d:
             cfg = {'mount': d, 'source': '//nas/data', 'expected_dirs': []}

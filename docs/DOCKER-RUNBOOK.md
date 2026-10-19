@@ -100,6 +100,8 @@ sudo bash scripts/pre-req.sh --mount
 
 This starts the fstab-generated systemd mount unit if necessary, verifies the exact CIFS source, target and `ro` option, and checks UID 997 can read/traverse both scan roots. Using systemd avoids racing its automount with a separate `mount.cifs` invocation. It leaves an existing mount's options unchanged; a wrong/writable mount fails verification. If you deliberately change an existing fstab entry, stop scanners, unmount/remount and verify again. No script changes NAS file permissions or writes test files to your media.
 
+`findmnt` may list both a `systemd-1` / `autofs` entry and the CIFS share at the same target. The checker accepts that pair only with one backing filesystem matching the expected read-only CIFS share. The automount entry's `rw` flag describes autofs, not NAS write permission.
+
 ## 4. Check prerequisites and build the image
 
 ```bash

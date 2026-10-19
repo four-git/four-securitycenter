@@ -31,11 +31,18 @@ def verify_mount(cfg):
         pass
     r = command(['findmnt', '-J', '-T', str(mount), '-o', 'SOURCE,TARGET,FSTYPE,OPTIONS'])
     rows = json.loads(r.stdout).get('filesystems', []) if r.returncode == 0 else []
-    if len(rows) != 1:
+    # Some util-linux versions report the systemd autofs entry alongside the
+    # filesystem mounted over it. Permit that wrapper at this exact target;
+    # still require one unambiguous backing filesystem and validate it below.
+    automounts = [row for row in rows if row.get('fstype') == 'autofs']
+    rows = [row for row in rows if row.get('fstype') != 'autofs']
+    if (len(rows) != 1 or len(automounts) > 1 or
+            any(Path(row.get('target', '')) != mount for row in automounts)):
         raise RuntimeError('SCAN_ERROR: mount missing or ambiguous')
     m = rows[0]
     if (m['fstype'] != 'cifs' or m['source'] != cfg['source'] or
-            Path(m['target']) != mount or 'ro' not in m['options'].split(',')):
+            Path(m['target']) != mount or 'ro' not in m['options'].split(',') or
+            'rw' in m['options'].split(',')):
         raise RuntimeError('SCAN_ERROR: expected read-only CIFS source/target not mounted')
     for relative in cfg['expected_dirs']:
         if not (mount / relative).is_dir():
