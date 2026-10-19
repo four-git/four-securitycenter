@@ -42,7 +42,7 @@ credentials=/etc/four-securitycenter/smb.credentials
 
 if (( mount_only )); then
   log 'Mount and verify the existing NAS configuration (no package or ownership changes)'
-  for command in mount findmnt python3 timeout setpriv; do
+  for command in systemd-escape findmnt python3 timeout setpriv; do
     command -v "$command" >/dev/null || die 'Run host preparation first.'
   done
   [[ -f $credentials && ! -L $credentials ]] || die "Create $credentials using host preparation first."
@@ -55,7 +55,10 @@ if (( mount_only )); then
   if findmnt -rn -M "$mount_path" -t cifs >/dev/null; then
     log 'CIFS is already mounted; verify it without remounting'
   else
-    run timeout --kill-after=5s 30s mount "$mount_path"
+    # The fstab automount can activate during path lookup. Let its owner serialize
+    # activation instead of racing mount.cifs against systemd's mount job.
+    mount_unit=$(systemd-escape --path --suffix=mount "$mount_path")
+    run timeout --kill-after=5s 30s systemctl start "$mount_unit"
   fi
   if (( ! dry_run )); then
     timeout --kill-after=5s 30s python3 - "$PWD/src" <<'PY'

@@ -37,6 +37,26 @@ class ScannerTests(unittest.TestCase):
             with patch.object(s, 'command', return_value=type('R', (), {'returncode': 0, 'stdout': json.dumps(good)})()):
                 self.assertEqual(s.verify_mount(cfg)['fstype'], 'cifs')
 
+    def test_mount_opens_automount_before_inspection(self):
+        with tempfile.TemporaryDirectory() as d:
+            cfg = {'mount': d, 'source': '//nas/data', 'expected_dirs': []}
+            activated = False
+
+            def activate(*args):
+                nonlocal activated
+                activated = True
+                from contextlib import nullcontext
+                return nullcontext()
+
+            def inspect(*args):
+                row = {'source': '//nas/data' if activated else 'systemd-1',
+                       'target': d, 'fstype': 'cifs' if activated else 'autofs',
+                       'options': 'ro,nodev'}
+                return type('R', (), {'returncode': 0, 'stdout': json.dumps({'filesystems': [row]})})()
+
+            with patch.object(s.os, 'scandir', side_effect=activate), patch.object(s, 'command', side_effect=inspect):
+                self.assertEqual(s.verify_mount(cfg)['fstype'], 'cifs')
+
     def test_pending_scan_cache_and_change(self):
         with tempfile.TemporaryDirectory() as d:
             base = Path(d)

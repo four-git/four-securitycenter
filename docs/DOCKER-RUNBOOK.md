@@ -98,7 +98,7 @@ Never put these values in shell commands, `.env` or Git. Then run:
 sudo bash scripts/pre-req.sh --mount
 ```
 
-This mounts the share if necessary, verifies the exact CIFS source, target and `ro` option, and checks UID 997 can read/traverse both scan roots. It leaves an existing mount's options unchanged; a wrong/writable mount fails verification. If you deliberately change an existing fstab entry, stop scanners, unmount/remount and verify again. No script changes NAS file permissions or writes test files to your media.
+This starts the fstab-generated systemd mount unit if necessary, verifies the exact CIFS source, target and `ro` option, and checks UID 997 can read/traverse both scan roots. Using systemd avoids racing its automount with a separate `mount.cifs` invocation. It leaves an existing mount's options unchanged; a wrong/writable mount fails verification. If you deliberately change an existing fstab entry, stop scanners, unmount/remount and verify again. No script changes NAS file permissions or writes test files to your media.
 
 ## 4. Check prerequisites and build the image
 

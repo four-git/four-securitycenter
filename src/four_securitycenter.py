@@ -22,9 +22,13 @@ def command(args, timeout=20, **kw):
 
 def verify_mount(cfg):
     mount = Path(cfg['mount'])
-    # Access triggers the systemd automount before inspecting the resulting filesystem.
     if not mount.is_dir():
         raise RuntimeError('SCAN_ERROR: mount directory unavailable')
+    # stat/is_dir on the automount point itself need not activate autofs. Opening
+    # the directory triggers it before findmnt inspects the covering filesystem.
+    # Callers bound health/preflight with a timeout; this never writes to the NAS.
+    with os.scandir(mount):
+        pass
     r = command(['findmnt', '-J', '-T', str(mount), '-o', 'SOURCE,TARGET,FSTYPE,OPTIONS'])
     rows = json.loads(r.stdout).get('filesystems', []) if r.returncode == 0 else []
     if len(rows) != 1:
